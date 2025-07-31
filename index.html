@@ -256,4 +256,355 @@
         className="w-16 h-16 text-purple-500 mb-4 mx-auto"
       >
         <path
-          d="M12 2a10 10 0 100 20A10 100 100 10zm-3.5 14.5a.5.5 0 01-.5-.5v-4.5h-.5a.5.5 0 01-.5-.5.5.5 0 01.5-.5h2a.5.5 0 01.5.5v5.5a.5.5 0 01-.5.5h-1zm1-5h-1a.5.5 0 01-.5-.5.5.5 0 01.5-.5h1a.5.5 0 
+          d="M12 2a10 10 0 100 20A10 100 100 10zm-3.5 14.5a.5.5 0 01-.5-.5v-4.5h-.5a.5.5 0 01-.5-.5.5.5 0 01.5-.5h2a.5.5 0 01.5.5v5.5a.5.5 0 01-.5.5h-1zm1-5h-1a.5.5 0 01-.5-.5.5.5 0 01.5-.5h1a.5.5 0 01.5.5.5.5 0 01-.5.5zm4.5 5.5a.5.5 0 01-.5-.5v-5.5a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v4.5a.5.5 0 01-.5.5h-1a.5.5 0 01-.5.5v.5a.5.5 0 01-.5-.5h-1a.5.5 0 01-.5.5v-.5a.5.5 0 01-.5.5zm1-4.5a.5.5 0 01-.5.5h-1a.5.5 0 01-.5-.5.5.5 0 01.5-.5h1a.5.5 0 01.5.5.5.5 0 01-.5.5zM12 8a.5.5 0 01-.5-.5v-1a.5.5 0 011 0v1a.5.5 0 01-.5.5zM12 10a.5.5 0 01-.5-.5v-1a.5.5 0 011 0v1a.5.5 0 01-.5.5z"
+        />
+      </svg>
+    );
+
+    const App = () => {
+      const [walletAddress, setWalletAddress] = useState(null);
+      const [noteContent, setNoteContent] = useState('');
+      const [folderName, setFolderName] = useState('Default');
+      const [editNoteId, setEditNoteId] = useState('');
+      const [editContent, setEditContent] = useState('');
+      const [transferNoteId, setTransferNoteId] = useState('');
+      const [transferAddress, setTransferAddress] = useState('');
+      const [notesList, setNotesList] = useState([]);
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState(null);
+
+      useEffect(() => {
+        if (window.ethereum) {
+          window.ethereum.on('accountsChanged', (accounts) => {
+            if (accounts.length > 0) {
+              setWalletAddress(accounts[0]);
+              fetchNotes();
+            } else {
+              setWalletAddress(null);
+              setNotesList([]);
+            }
+          });
+          window.ethereum.request({ method: 'eth_accounts' }).then((accounts) => {
+            if (accounts.length > 0) {
+              setWalletAddress(accounts[0]);
+              fetchNotes();
+            }
+          });
+        }
+      }, []);
+      
+      const connectWallet = async () => {
+        if (!window.ethereum) {
+          setError('MetaMask not found. Please install it.');
+          return;
+        }
+        setLoading(true);
+        try {
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const accounts = await provider.send('eth_requestAccounts', []);
+          setWalletAddress(accounts[0]);
+          fetchNotes();
+        } catch (err) {
+          console.error(err);
+          setError('Could not connect to wallet.');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const getContract = async (signer = false) => {
+        if (!window.ethereum) {
+          setError('MetaMask not found.');
+          return null;
+        }
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const currentSigner = signer ? await provider.getSigner() : provider;
+        return new ethers.Contract(contractAddress, contractABI, currentSigner);
+      };
+
+      const createNote = async () => {
+        if (!walletAddress || !noteContent || !folderName) {
+          setError('Please fill in all fields.');
+          return;
+        }
+        setLoading(true);
+        setError(null);
+        try {
+          const contract = await getContract(true);
+          const transaction = await contract.createNote(folderName, noteContent);
+          alert('Creating note...');
+          await transaction.wait();
+          setNoteContent('');
+          setFolderName('Default');
+          alert('Note created successfully!');
+          fetchNotes();
+        } catch (err) {
+          console.error(err);
+          setError('Error creating note.');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const fetchNotes = async () => {
+        if (!walletAddress) return;
+        setLoading(true);
+        setError(null);
+        try {
+          const contract = await getContract();
+          const noteIds = await contract.getNotesInFolder(folderName);
+          const fetchedNotes = await Promise.all(
+            noteIds.map(async (id) => {
+              const note = await contract.notes(id);
+              return {
+                id: Number(id),
+                content: note.content,
+                timestamp: Number(note.timestamp),
+                owner: note.owner,
+                folderName: note.folderName,
+              };
+            })
+          );
+          setNotesList(fetchedNotes);
+        } catch (err) {
+          console.error(err);
+          setError('Error fetching notes.');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const editNote = async () => {
+        if (!editNoteId || !editContent) {
+          setError('Please provide a Note ID and new content.');
+          return;
+        }
+        setLoading(true);
+        setError(null);
+        try {
+          const contract = await getContract(true);
+          const transaction = await contract.editNote(editNoteId, editContent);
+          alert('Editing note...');
+          await transaction.wait();
+          alert('Note edited successfully!');
+          setEditNoteId('');
+          setEditContent('');
+          fetchNotes();
+        } catch (err) {
+          console.error(err);
+          setError('Error editing note. Ensure you are the owner and the ID is correct.');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const transferNote = async () => {
+        if (!transferNoteId || !transferAddress) {
+          setError('Please provide a Note ID and new address.');
+          return;
+        }
+        setLoading(true);
+        setError(null);
+        try {
+          const contract = await getContract(true);
+          const transaction = await contract.transferNote(transferNoteId, transferAddress);
+          alert('Transferring note...');
+          await transaction.wait();
+          alert('Note transferred successfully!');
+          setTransferNoteId('');
+          setTransferAddress('');
+          fetchNotes();
+        } catch (err) {
+          console.error(err);
+          setError('Error transferring note. Ensure you are the owner and the address is correct.');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const formatDate = (timestamp) => {
+        return new Date(Number(timestamp) * 1000).toLocaleString();
+      };
+      
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-overlay">
+          <div className="p-8 rounded-xl shadow-lg w-full max-w-2xl bg-gray-800 space-y-8">
+            <SomniaLogo />
+            <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-4 text-center">
+              Somnia Note V2
+            </h1>
+            <p className="text-gray-400 text-center">
+              A decentralized note-taking Dapp with folders, editing, and transfers.
+            </p>
+
+            {!walletAddress ? (
+              <div className="text-center">
+                <button
+                  onClick={connectWallet}
+                  className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-md"
+                  disabled={loading}
+                >
+                  {loading ? 'Connecting...' : 'Connect Wallet'}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="bg-gray-700 p-4 rounded-lg flex items-center justify-between">
+                  <span className="text-gray-400">Connected:</span>
+                  <span className="font-mono text-sm text-purple-300 truncate">
+                    {walletAddress}
+                  </span>
+                </div>
+
+                {/* Create Note Section */}
+                <div className="space-y-4 bg-gray-700 p-4 rounded-lg shadow-inner">
+                  <h2 className="text-2xl font-bold text-gray-300">Create New Note</h2>
+                  <div>
+                    <label htmlFor="folder-name-input" className="block text-gray-300 font-medium">Folder Name</label>
+                    <input
+                      id="folder-name-input"
+                      type="text"
+                      value={folderName}
+                      onChange={(e) => setFolderName(e.target.value)}
+                      className="w-full p-2 mt-1 bg-gray-600 rounded-lg border border-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
+                      placeholder="e.g., 'Work', 'Personal', 'Ideas'"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="note-content-input" className="block text-gray-300 font-medium">Note Content</label>
+                    <textarea
+                      id="note-content-input"
+                      className="w-full p-2 mt-1 bg-gray-600 rounded-lg border border-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
+                      rows="4"
+                      value={noteContent}
+                      onChange={(e) => setNoteContent(e.target.value)}
+                      placeholder="Enter your note here..."
+                    ></textarea>
+                  </div>
+                  <button
+                    onClick={createNote}
+                    className="w-full bg-gradient-to-r from-green-500 to-teal-600 hover:from-green-600 hover:to-teal-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-md"
+                    disabled={loading}
+                  >
+                    {loading ? 'Creating...' : 'Create Note'}
+                  </button>
+                </div>
+                
+                {/* Notes List Section */}
+                <div className="space-y-4 bg-gray-700 p-4 rounded-lg shadow-inner">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-2xl font-bold text-gray-300">My Notes</h2>
+                    <button
+                      onClick={fetchNotes}
+                      className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-all duration-300 shadow-md"
+                      disabled={loading}
+                    >
+                      {loading ? 'Fetching...' : 'Refresh Notes'}
+                    </button>
+                  </div>
+                  {notesList.length > 0 ? (
+                    <div className="space-y-4 max-h-60 overflow-y-auto">
+                      {notesList.map((note) => (
+                        <div key={note.id} className="bg-gray-600 p-3 rounded-lg border border-gray-500">
+                          <p className="text-sm font-mono text-gray-400">ID: {note.id} | Folder: {note.folderName}</p>
+                          <p className="mt-2 text-lg break-words">{note.content}</p>
+                          <p className="mt-2 text-xs text-gray-500">Last updated: {formatDate(note.timestamp)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-400 italic">No notes found in this folder. Create one above!</p>
+                  )}
+                </div>
+
+                {/* Edit Note Section */}
+                <div className="space-y-4 bg-gray-700 p-4 rounded-lg shadow-inner">
+                  <h2 className="text-2xl font-bold text-gray-300">Edit Existing Note</h2>
+                  <div>
+                    <label htmlFor="edit-note-id" className="block text-gray-300 font-medium">Note ID</label>
+                    <input
+                      id="edit-note-id"
+                      type="number"
+                      value={editNoteId}
+                      onChange={(e) => setEditNoteId(e.target.value)}
+                      className="w-full p-2 mt-1 bg-gray-600 rounded-lg border border-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
+                      placeholder="e.g., 1, 2, 3"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="edit-content" className="block text-gray-300 font-medium">New Content</label>
+                    <textarea
+                      id="edit-content"
+                      className="w-full p-2 mt-1 bg-gray-600 rounded-lg border border-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
+                      rows="3"
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      placeholder="Enter the new content for your note..."
+                    ></textarea>
+                  </div>
+                  <button
+                    onClick={editNote}
+                    className="w-full bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-600 hover:to-orange-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-md"
+                    disabled={loading}
+                  >
+                    {loading ? 'Editing...' : 'Edit Note'}
+                  </button>
+                </div>
+
+                {/* Transfer Note Section */}
+                <div className="space-y-4 bg-gray-700 p-4 rounded-lg shadow-inner">
+                  <h2 className="text-2xl font-bold text-gray-300">Transfer a Note</h2>
+                  <div>
+                    <label htmlFor="transfer-note-id" className="block text-gray-300 font-medium">Note ID</label>
+                    <input
+                      id="transfer-note-id"
+                      type="number"
+                      value={transferNoteId}
+                      onChange={(e) => setTransferNoteId(e.target.value)}
+                      className="w-full p-2 mt-1 bg-gray-600 rounded-lg border border-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
+                      placeholder="e.g., 1, 2, 3"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="transfer-address" className="block text-gray-300 font-medium">New Owner Address</label>
+                    <input
+                      id="transfer-address"
+                      type="text"
+                      value={transferAddress}
+                      onChange={(e) => setTransferAddress(e.target.value)}
+                      className="w-full p-2 mt-1 bg-gray-600 rounded-lg border border-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
+                      placeholder="0x..."
+                    />
+                  </div>
+                  <button
+                    onClick={transferNote}
+                    className="w-full bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-600 hover:to-pink-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-md"
+                    disabled={loading}
+                  >
+                    {loading ? 'Transferring...' : 'Transfer Note'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {loading && (
+              <div className="mt-6 text-center text-purple-400">
+                Processing transaction...
+              </div>
+            )}
+            
+            {error && (
+              <div className="mt-6 p-4 rounded-lg bg-red-900 text-red-200">
+                Error: {error}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
