@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Somnia Note V2</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.5/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.1/dist/ethers.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+    
+    body {
+      background-color: #1a202c;
+      background-image: url('https://collection.cloudinary.com/dnrkvhmm3/fd11f568b7b50e5dbc6d6c215ac3cdf7'); 
+      background-size: cover;
+      background-position: center;
+      background-attachment: fixed;
+    }
+
+    .bg-overlay {
+      background-color: rgba(0, 0, 0, 0.7);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+    const { ethers } = window;
+
+    // Smart contract details
+    const contractAddress = "0xc7ca748CE655a6506E259BA3d27d6CEDd2Ae20e9";
+    const contractABI = [
+      {
+        "inputs": [
+          {
+            "internalType": "string",
+            "name": "_folderName",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "_content",
+            "type": "string"
+          }
+        ],
+        "name": "createNote",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "_noteId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "string",
+            "name": "_newContent",
+            "type": "string"
+          }
+        ],
+        "name": "editNote",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "internalType": "address",
+            "name": "owner",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "internalType": "uint256",
+            "name": "noteId",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "internalType": "string",
+            "name": "folderName",
+            "type": "string"
+          }
+        ],
+        "name": "NoteCreated",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "internalType": "address",
+            "name": "owner",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "internalType": "uint256",
+            "name": "noteId",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "internalType": "string",
+            "name": "newContent",
+            "type": "string"
+          }
+        ],
+        "name": "NoteEdited",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "internalType": "address",
+            "name": "from",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "internalType": "address",
+            "name": "to",
+            "type": "address"
+          },
+          {
+            "indexed": true,
+            "internalType": "uint256",
+            "name": "noteId",
+            "type": "uint256"
+          }
+        ],
+        "name": "NoteTransferred",
+        "type": "event"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "_noteId",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "_newOwner",
+            "type": "address"
+          }
+        ],
+        "name": "transferNote",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "string",
+            "name": "_folderName",
+            "type": "string"
+          }
+        ],
+        "name": "getNotesInFolder",
+        "outputs": [
+          {
+            "internalType": "uint256[]",
+            "name": "",
+            "type": "uint256[]"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "name": "notes",
+        "outputs": [
+          {
+            "internalType": "string",
+            "name": "content",
+            "type": "string"
+          },
+          {
+            "internalType": "uint256",
+            "name": "timestamp",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "owner",
+            "type": "address"
+          },
+          {
+            "internalType": "string",
+            "name": "folderName",
+            "type": "string"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "",
+            "type": "address"
+          },
+          {
+            "internalType": "string",
+            "name": "",
+            "type": "string"
+          },
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "name": "userNotesInFolder",
+        "outputs": [
+          {
+            "internalType": "uint256",
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+      }
+    ];
+
+    const SomniaLogo = () => (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className="w-16 h-16 text-purple-500 mb-4 mx-auto"
+      >
+        <path
+          d="M12 2a10 10 0 100 20A10 100 100 10zm-3.5 14.5a.5.5 0 01-.5-.5v-4.5h-.5a.5.5 0 01-.5-.5.5.5 0 01.5-.5h2a.5.5 0 01.5.5v5.5a.5.5 0 01-.5.5h-1zm1-5h-1a.5.5 0 01-.5-.5.5.5 0 01.5-.5h1a.5.5 0 
